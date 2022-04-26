@@ -1,3 +1,7 @@
+/*
+ * Copyright 2022 Robert Reed
+ */
+
 $(document).ready(init);
 
 var canvas;
