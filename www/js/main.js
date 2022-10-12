@@ -15,8 +15,10 @@ var colorPicker;
 var initTimer;
 
 let worldRadius = 75;
+let vehicleRadius = 20;
 let gravityFactor = 4000;
 let speedFactor = .025;
+
 
 
 // Should be very close to, but below 1, like .9995
@@ -63,7 +65,7 @@ function setPlanetLocations() {
     x: canvas.width/4,
     y: canvas.height/2,
     radius: baseRadius,
-    impacts: 0,
+    impacts: (planet1) ? planet1.impacts : 0,
     weight: 1,
     rocketImage: "img/blueRocket.png"
   };
@@ -72,7 +74,7 @@ function setPlanetLocations() {
     x: 3*canvas.width/4,
     y: canvas.height/2,
     radius: baseRadius,
-    impacts: 0,
+    impacts: (planet2) ? planet2.impacts : 0,
     weight: 1,
     rocketImage: "img/redRocket.png"
   };
@@ -197,9 +199,25 @@ function cleanData() {
   dots = newDots;
 }
 
+function checkIntercepts(dots) {
+  for (let i=0; i<dots.length; i++) {
+    for (let j=i+1; j<dots.length; j++) {
+      dot1 = dots[i];
+      dot2 = dots[j];
+
+      if (!dot1.impacted && dotDistance(dot1,dot2) < vehicleRadius) {
+        dot1.impacted = true;
+        dot2.impacted = true;
+      }
+    }
+  }
+}
+
 
 let lastCalcTime = (new Date()).getTime();
 function recalculateData() {
+  checkIntercepts(dots);
+
   // TODO drop origV in favor of using "elapsedTimeSinceLastRecalculation" (rather than total elapsed time)
   for (let i in dots) {
     let dot = dots[i];
@@ -268,4 +286,8 @@ function forceEffectX(pstats) {
 
 function impactedPlanet(planet, dot, distance) {
   return distance < (dot.radius+planet.radius);
+}
+
+function dotDistance(dot1, dot2) {
+  return Math.sqrt( Math.pow(dot1.x-dot2.x,2)+Math.pow(dot1.y-dot2.y,2) )
 }
