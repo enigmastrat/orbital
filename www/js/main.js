@@ -64,6 +64,7 @@ function setPlanetLocations() {
     color: "#08F",
     x: canvas.width/4,
     y: canvas.height/2,
+    z: 0,
     radius: baseRadius,
     impacts: (planet1) ? planet1.impacts : 0,
     weight: 1,
@@ -73,6 +74,7 @@ function setPlanetLocations() {
     color: "#F40",
     x: 3*canvas.width/4,
     y: canvas.height/2,
+    z: 0,
     radius: baseRadius,
     impacts: (planet2) ? planet2.impacts : 0,
     weight: 1,
@@ -109,10 +111,15 @@ function addBall(x, y) {
   let color = (direction > 0) ? planet1.color : planet2.color;
   let image = (direction > 0) ? planet1.rocketImage : planet2.rocketImage;
 
+  let zCardinality = (Math.random()>.5)?1:-1;
+  let zv = (((5+Math.random()*5)/speedFactor)*zCardinality)/5;
+  //console.log(zv);
   dots.push({
     x: x,
     y: y,
+    z: 0,
     xv: direction*((5+Math.random()*5)/speedFactor),
+    zv: zv,
     v: ((Math.random()*2)-2)/speedFactor,
     bounciness: -((Math.random()*.10)+.8),
     width: width,
@@ -121,8 +128,10 @@ function addBall(x, y) {
     color: color,
     time: (new Date()).getTime(),
     impacted: false,
-    image: image
+    image: image,
+    obscured: false
   });
+
 }
 
 function clearCanvas() {
@@ -143,18 +152,34 @@ function drawCanvas() {
       continue;
     }
 
+    let zMax = 200;
+    let zCardinality = (dot.z>0)?1:-1;
+
+    let zScale = Math.abs(dot.z/zMax)*5*zCardinality;
+
+    //console.log(zScale);
+
     // TODO figure out how to deal with image angles
     if (!dot.impacted) {
-      let image = new Image(dot.radius, dot.radius);
-      image.src = dot.image;
-      let dx = dot.x - dot.radius;
-      let dy = dot.y - dot.radius;
-      let angle = Math.atan2(dot.v, dot.xv);
-      ctx.save();
-      ctx.translate(dot.x, dot.y);
-      ctx.rotate(angle + Math.PI * .5);// * Math.PI / 180);
-      ctx.drawImage(image, -image.width*3, 0, 10, 20);
-      ctx.restore();
+
+
+      if (!dot.obscured) {
+
+        let zVelPercent = 1-(dot.zv*dot.zv)/((dot.zv*dot.zv)+(dot.xv*dot.xv)+(dot.v*dot.v))
+
+        //console.log(dot.x + ":" + dot.y + ":" + dot.z);
+        let image = new Image(dot.radius, dot.radius);
+        image.src = dot.image;
+        let dx = dot.x - dot.radius;
+        let dy = dot.y - dot.radius;
+        let dz = dot.z - dot.radius;
+        let angle = Math.atan2(dot.v, dot.xv);
+        ctx.save();
+        ctx.translate(dot.x, dot.y);
+        ctx.rotate(angle + Math.PI * .5);// * Math.PI / 180);
+        ctx.drawImage(image, -image.width*3, 0, 10+zScale, zVelPercent*(20+zScale+zScale)); //TODO zScale
+        ctx.restore();
+      }
     } else {
       ctx.fillStyle = dot.color;
       ctx.beginPath();
@@ -247,11 +272,17 @@ function recalculateData() {
     }
 
     if (!dot.impacted) {
+      let p1Obscured = obscuredByPlanet(planet1, dot);
+      let p2Obscured = obscuredByPlanet(planet2, dot);
+      dot.obscured = (p1Obscured || p2Obscured);
+
       dot.v = (orbitalDecay*dot.v) + (forceEffectY(p1Stats) + forceEffectY(p2Stats))/speedFactor;
       dot.xv = (orbitalDecay*dot.xv) + (forceEffectX(p1Stats) + forceEffectX(p2Stats))/speedFactor;
-
+      dot.zv = (orbitalDecay*dot.zv) + (forceEffectZ(p1Stats) + forceEffectZ(p2Stats))/speedFactor;
+      //console.log(dot.zv);
       dot.y = dot.y + (dot.v*elapsedTime);
       dot.x = dot.x + (dot.xv*elapsedTime);
+      dot.z = dot.z + (dot.zv*elapsedTime);
     }
   }
   lastCalcTime = (new Date()).getTime();
@@ -260,19 +291,24 @@ function recalculateData() {
 function getPlanetDistanceStats(planet, dot) {
   let distX = planet.x-dot.x;
   let distY = planet.y-dot.y;
-  let dist = Math.sqrt(distX*distX + distY*distY);
+  let distZ = planet.z-dot.z;
+  let dist = Math.sqrt(distX*distX + distY*distY + distZ*distZ);
   let force = gravityFactor*(planet.weight/(dist*dist));
   let velocityChange = Math.sqrt(2*force); // F = (1/2)mv^2 TODO figure out if this is needed
 
-  let percentY = (distY*distY)/(distX*distX + distY*distY);
-  let percentX = (distX*distX)/(distX*distX + distY*distY);
+  let percentY = (distY*distY)/(distX*distX + distY*distY + distZ*distZ);
+  let percentX = (distX*distX)/(distX*distX + distY*distY + distZ*distZ);
+  let percentZ = (distZ*distZ)/(distX*distX + distY*distY + distZ*distZ);
+
   return {
     distX: distX,
     distY: distY,
+    distZ: distZ,
     dist: dist,
     force: force,
     percentY: percentY,
     percentX: percentX,
+    percentZ: percentZ,
     velocityChange: velocityChange
   };
 }
@@ -283,11 +319,27 @@ function forceEffectY(pstats) {
 function forceEffectX(pstats) {
   return pstats.force * pstats.percentX * (pstats.distX / Math.abs(pstats.distX));
 }
+function forceEffectZ(pstats) {
+  if (pstats.distZ == 0) {
+    return 0;    
+  }
+
+  let val = pstats.force * pstats.percentZ * (pstats.distZ / Math.abs(pstats.distZ))
+  //console.log(val);
+  return val;
+}
 
 function impactedPlanet(planet, dot, distance) {
   return distance < (dot.radius+planet.radius);
 }
+function obscuredByPlanet(planet, dot) {
+  let distX = planet.x-dot.x;
+  let distY = planet.y-dot.y;
+  
+  let xydist = Math.sqrt(distX*distX + distY*distY);
+  return (xydist < (planet.radius+dot.radius)) && dot.z < 0;
+}
 
 function dotDistance(dot1, dot2) {
-  return Math.sqrt( Math.pow(dot1.x-dot2.x,2)+Math.pow(dot1.y-dot2.y,2) )
+  return Math.sqrt( Math.pow(dot1.x-dot2.x,2)+Math.pow(dot1.y-dot2.y,2)+Math.pow(dot1.z-dot2.z,2) )
 }
